@@ -42,6 +42,9 @@
   ((values)
    (count :initform 0)))
 
+(defclass exponentially-decaying-sample ()
+  ())
+
 (defmethod initialize-instance :after ((u uniform-sample) &key (size *default-sample-size*))
   (setf (slot-value u 'values) (make-array (list size))))
 
@@ -119,6 +122,10 @@
   `(let ((h (make-instance 'histogram :sample (make-instance 'uniform-sample))))
      ,@body))
 
+(defmacro exp-setup (&body body)
+  `(let ((h (make-instance 'histogram :sample (make-instance 'exponentially-decaying-sample))))
+     ,@body))
+
 (define-test uniform-sample-min-max-mean
   (uni-setup
    (update h 5)
@@ -163,6 +170,60 @@
        (update h i)))
    (let ((snapshot (snapshot h)))
      (assert-equal 49.5 (median snapshot)))))
+
+(define-test exponential-sample-min
+  (exp-setup
+   (update h 5)
+   (update h 10)
+   (assert-equalp 5 (minimum h))))
+
+(define-test exponential-sample-max
+  (exp-setup
+   (update h 5)
+   (update h 10)
+   (assert-equalp 10 (maximum h))))
+
+(define-test exponential-sample-mean
+  (exp-setup
+   (update h 5)
+   (update h 10)
+   (assert-equalp 7 (mean h))))
+
+(define-test exponential-sample-mean-threaded
+  (exp-setup
+    (with-threads 10
+      (dotimes (i 100)
+        (update h 5)
+        (update h 10)))
+    (assert-equalp 7 (mean h))))
+
+(define-test exponential-sample-2000
+  (exp-setup
+    (dotimes (i 2000)
+      (update h i))
+    (assert-equalp 1999 (maximum h))))
+
+(define-test exponential-sample-2000-threaded
+  (exp-setup
+    (with-threads 10
+      (dotimes (idx 2000)
+        (when (= threadnr (mod idx 10))
+          (update h idx))))
+    (assert-equalp 1999 (maximum h))))
+
+(define-test exponential-sample-snapshot
+  (exp-setup
+    (dotimes (i 100)
+      (update h i))
+    (assert-equalp 49.5 (median (snapshot h)))))
+
+(define-test exponential-sample-snapshot-threaded
+  (exp-setup
+    (with-threads 10
+      (dotimes (i 100)
+        (update h i)))
+    (assert-equalp 49.5 (median (snapshot h)))))
+
 
 (defmacro with-threads (n &body body)
   `(let ((threads (list)))
